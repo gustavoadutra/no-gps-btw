@@ -1,0 +1,16 @@
+services:
+  run_machine:
+    container_name: you_can_run_for_a_long_time
+    build: .
+    runtime: nvidia
+    volumes:
+      - ./src:/src
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
