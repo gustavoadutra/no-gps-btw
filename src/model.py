@@ -34,7 +34,23 @@ import random
 diretorio_origem = './Origem'
 diretorio_destino = './Destino'
 
-arquivos_zip = [f for f in os.listdir(diretorio_origem) if f.endswith('.zip')]
+
+# Transforma as cores da imagem para escala de cinza
+def to_gray(folder):
+    for img in os.listdir(folder):
+        img_path = os.path.join(folder, img)
+        img = cv2.imread(img_path)
+        if img is not None:
+            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            cv2.imwrite(img_path, gray_img)
+
+
+diretorio_origem = './Origem'
+diretorio_destino = './Destino'
+
+
+#arquivos_zip = [f for f in os.listdir(diretorio_origem) if f.endswith('.zip')]
+arquivos_zip = [] # Para não extrair os arquivos zipados novamente
 
 # Extrái arquivos
 for arquivo in arquivos_zip:
@@ -57,19 +73,9 @@ for arquivo in arquivos:
         os.rename(caminho_original, caminho_destino)
 print("Renomeação concluída.")
 
-
-# Transforma as cores da imagem para escala de cinza
-def to_gray(folder):
-    for img in os.listdir(folder):
-        img_path = os.path.join(folder, img)
-        img = cv2.imread(img_path)
-        if img is not None:
-            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            cv2.imwrite(img_path, gray_img)
-
-
 to_gray(caminho_diretorio)
 print("Transformação de cores concluída.")
+
 """### 2 Normalização, Embaralhamento de Divisão"""
 
 class MakeData(Dataset):
@@ -83,14 +89,13 @@ class MakeData(Dataset):
 
   def __getitem__(self, idx):
     img_name = os.path.join(self.root_dir, self.image_list[idx])
-    image =  Image.open(img_name)
+    #image =  Image.open(img_name)
     image = cv2.imread(img_name, cv2.IMREAD_GRAYSCALE)  # Ensure image is read in grayscale
 
 
     if self.transform:
       image = self.transform(image)
       image = torch.rot90(image, k=1, dims=(1, 2))
-
     return image
 
   def get_batch(self,indice,size):
@@ -402,15 +407,15 @@ def resume_training(train_data,test_data,epochs,batch_size):
 
   for epoch in range(start_epoch + 1, start_epoch + epochs + 1):
     train_min_loss, train_max_loss, train_loss = train(epoch,train_data,batch_size)
-    # test_min_loss, test_max_loss, test_loss = test(epoch,test_data,batch_size)
+    test_min_loss, test_max_loss, test_loss = test(epoch,test_data,batch_size)
     result.append([train_min_loss, train_max_loss])
-    # result2.append([test_min_loss, test_max_loss])
+    result2.append([test_min_loss, test_max_loss])
     e = epoch
     loss = train_loss
     if loss <= 0.0008 or epoch % 10 == 0:
       torch.save(model.state_dict(), './Modelos/Epocas/Epoch_'+str(e)+'_Train_loss_'+str(round(loss,4))+'.pth')#, test_loss))
   #result = 0
-  result2 = 0
+  #result2 = 0
   return result,result2
 
 gpu = torch.device("cuda")
@@ -420,5 +425,62 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4)
 summary(model,(1,320,160))
 
 """### 6 Análise"""
+def decode_real_img(img):
 
-z_img,test_img = resume_training(train_data=conjunto_treino, test_data=conjunto_teste, epochs=10, batch_size=8)
+  if load_last_model() == 0:
+    print("Nenhum arquivo de modelo encontrado. Certifique-se de que os arquivos estejam no diretório especificado.")
+    return
+  else:
+    model.eval()
+    gpu = torch.device("cuda")
+
+    transform = transforms.Compose([transforms.ToTensor(),transforms.Resize((160,320))])
+    x = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
+
+    x = transform(x)
+    x = torch.rot90(x, k=1, dims=(1, 2))
+    x = x.unsqueeze(0)
+
+    with torch.inference_mode():
+      if torch.cuda.is_available():
+        x = x.to(gpu)
+        #embedding = model.get_embeddings(x)
+        img_recon = model(x)
+
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
+    #return embedding, img['id'], img['img'][1:], img['coord'], img_recon[0]
+    #return [embedding, img['id'], img['coord']]
+    # Tratamento para voltar a ser imagem
+    #img_recon = torch.rot90(img_recon[0], k=-1, dims=(1,2))
+    img_recon = img_recon[0].detach().cpu().numpy()
+    img_recon = img_recon.squeeze()  # Ensure the image is in the correct shape
+
+    return img_recon
+  
+#z_img,test_img = resume_training(train_data=conjunto_treino, test_data=conjunto_teste, epochs=10, batch_size=8)
+
+img_real = '/src/Destino/KNOW-REFERENCEMAP-2022/00001_2022_01.tiff'
+img_recon = decode_real_img(img_real)
+import matplotlib.pyplot as plt
+from scipy.ndimage import rotate
+
+
+# Load the real image
+real_image = cv2.imread(img_real, cv2.IMREAD_GRAYSCALE)
+real_image_rotated = rotate(real_image, 90)
+
+# Plot the real image and reconstructed image side by side
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+axes[0].imshow(real_image_rotated, cmap='gray')
+axes[0].set_title('Real Image')
+axes[0].axis('off')
+axes[1].imshow(img_recon, cmap='gray')
+axes[1].set_title('Reconstructed Image')
+axes[1].axis('off')
+
+# Show the plot
+plt.show()
+# Fazer a imagem real aparecer do lado da imagem reconstruída
+
