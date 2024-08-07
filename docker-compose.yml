@@ -1,6 +1,6 @@
 services:
   run_machine:
-    container_name: you_can_run_for_a_long_time
+    container_name: no_gps_btw
     build: .
     runtime: nvidia
     volumes:
