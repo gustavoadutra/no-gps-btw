@@ -53,7 +53,7 @@ diretorio_destino = './Destino'
 arquivos_zip = [] # Para não extrair os arquivos zipados novamente
 
 # Extrái arquivos
-for arquivo in arquivos_zip:
+'''for arquivo in arquivos_zip:
     caminho_arquivo = os.path.join(diretorio_origem, arquivo)
 
     with zipfile.ZipFile(caminho_arquivo, 'r') as zip_ref:
@@ -75,7 +75,7 @@ print("Renomeação concluída.")
 
 to_gray(caminho_diretorio)
 print("Transformação de cores concluída.")
-
+'''
 """### 2 Normalização, Embaralhamento de Divisão"""
 
 class MakeData(Dataset):
@@ -112,12 +112,15 @@ def split_data(dataset,img_list):
   size_val   = dataset.__len__() - size_train - size_test
 
   pares = list(zip(dataset, img_list))
+  generator1 = torch.Generator().manual_seed(42)
+
   #random.shuffle(pares) seria mais eficiente?
   conjunto_treino, conjunto_teste, conjunto_validacao = random_split(
       pares,
       [size_train,
        size_test,
-       size_val])
+       size_val],
+       generator=generator1)
 
   train_tensor, train_img = map(list, zip(*conjunto_treino))
   test_tensor, test_img = map(list, zip(*conjunto_teste))
@@ -407,15 +410,17 @@ def resume_training(train_data,test_data,epochs,batch_size):
 
   for epoch in range(start_epoch + 1, start_epoch + epochs + 1):
     train_min_loss, train_max_loss, train_loss = train(epoch,train_data,batch_size)
-    test_min_loss, test_max_loss, test_loss = test(epoch,test_data,batch_size)
-    result.append([train_min_loss, train_max_loss])
-    result2.append([test_min_loss, test_max_loss])
+    if epoch % 10 == 0:
+      test_min_loss, test_max_loss, test_loss = test(epoch,test_data,batch_size)
+      #result2.append([test_min_loss, test_max_loss])
+
+    #result.append([train_min_loss, train_max_loss])
     e = epoch
     loss = train_loss
     if loss <= 0.0008 or epoch % 10 == 0:
       torch.save(model.state_dict(), './Modelos/Epocas/Epoch_'+str(e)+'_Train_loss_'+str(round(loss,4))+'.pth')#, test_loss))
-  #result = 0
-  #result2 = 0
+  result = 0
+  result2 = 0
   return result,result2
 
 gpu = torch.device("cuda")
@@ -459,28 +464,8 @@ def decode_real_img(img):
 
     return img_recon
   
-#z_img,test_img = resume_training(train_data=conjunto_treino, test_data=conjunto_teste, epochs=10, batch_size=8)
+# treinar o modelo com o mesmo split toda vez sem estourar a memória da GPU
 
-img_real = '/src/Destino/KNOW-REFERENCEMAP-2022/00001_2022_01.tiff'
-img_recon = decode_real_img(img_real)
-import matplotlib.pyplot as plt
-from scipy.ndimage import rotate
+z_img,test_img = resume_training(train_data=conjunto_treino, test_data=conjunto_teste, epochs=10, batch_size=8)
 
-
-# Load the real image
-real_image = cv2.imread(img_real, cv2.IMREAD_GRAYSCALE)
-real_image_rotated = rotate(real_image, 90)
-
-# Plot the real image and reconstructed image side by side
-fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-axes[0].imshow(real_image_rotated, cmap='gray')
-axes[0].set_title('Real Image')
-axes[0].axis('off')
-axes[1].imshow(img_recon, cmap='gray')
-axes[1].set_title('Reconstructed Image')
-axes[1].axis('off')
-
-# Show the plot
-plt.show()
-# Fazer a imagem real aparecer do lado da imagem reconstruída
 
